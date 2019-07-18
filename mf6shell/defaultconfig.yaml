@@ -1,0 +1,15 @@
+package_options: {
+  tdis: {
+    time_units: 'DAYS',
+    },
+  gwf: {
+    save_flows: True,
+    },
+  dis: {
+    length_units: 'METERS',
+  },
+  oc: {
+      saverecord: [['HEAD', 'ALL'], ['BUDGET', 'ALL']],
+      printrecord: [['HEAD', 'LAST']],
+    }
+}
