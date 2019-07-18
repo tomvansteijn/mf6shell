@@ -26,6 +26,7 @@ class Modflow6Model(object):
         datafolder=None,
         packages=None,
         data=None,
+        maxbound=None,
         options=None,
         namefile=None,
         headsfile=None,
@@ -43,6 +44,7 @@ class Modflow6Model(object):
 
         self.packages = packages or {}
         self.data = data or {}
+        self.maxbound = maxbound or {}
         self.options = options or {}
 
         # input and output filenames
@@ -232,6 +234,9 @@ class Modflow6Model(object):
         # add file reference to self.data
         self.data['chd'] = self._get_file_ext(chddatfile)
 
+        # add nrows to maxbound
+        self.maxbound['chd'] = len(chd_data)
+
     def write_topsys(self, fill_value=0.):
         topsys_data = self.model.parameters['topsys'].get_data()
 
@@ -267,6 +272,9 @@ class Modflow6Model(object):
 
         # add file reference to self.data
         self.data['drn'] = self._get_file_ext(drndatfile)
+
+        # add nrows to maxbound
+        self.maxbound['drn'] = len(drn_data)
 
         # ghb package
         ghb_columns = ['ilay', 'row', 'col', 'head', 'cond']
@@ -304,6 +312,9 @@ class Modflow6Model(object):
         # add file reference to self.data
         self.data['ghb'] = self._get_file_ext(ghbdatfile)
 
+        # add nrows to maxbound
+        self.maxbound['ghb'] = len(ghb_data)
+
         # riv package
         riv_columns = ['ilay', 'row', 'col', 'head', 'cond', 'rbot']
         
@@ -340,6 +351,9 @@ class Modflow6Model(object):
         # add file reference to self.data
         self.data['riv'] = self._get_file_ext(rivdatfile)
 
+        # add nrows to maxbound
+        self.maxbound['riv'] = len(riv_data)
+
 
     def write_wel(self) -> None:
         wel_data = self.model.parameters['wells'].get_data()
@@ -358,6 +372,9 @@ class Modflow6Model(object):
 
         # add file reference to self.data
         self.data['wel'] = self._get_file_ext(weldatfile)
+
+        # add nrows to maxbound
+        self.maxbound['wel'] = len(wel_data)
 
 
     def write_data(self) -> None:
@@ -402,7 +419,6 @@ class Modflow6Model(object):
         # create the Flopy iterative model solver (ims) Package object
         self.packages['ims'] = flopy.mf6.modflow.mfims.ModflowIms(
             self.packages['sim'],
-            pname='ims',
             **self.options.get('ims', {}),
             )
 
@@ -413,9 +429,9 @@ class Modflow6Model(object):
             nlay=self.model.nlay3d,
             nrow=self.model.grid.nrow, ncol=self.model.grid.ncol,
             delr=self.model.grid.delr, delc=self.model.grid.delc,
+            xorigin=self.model.grid.xmin, yorigin=self.model.grid.ymin,
             top=self.data['top'], botm=self.data['botm'],
             idomain=self.data['idomain'],
-            pname='dis',
             **self.options.get('dis', {}),
             )
 
@@ -425,7 +441,6 @@ class Modflow6Model(object):
             k=self.data['kh'],
             k22=self.data['kh'],
             k33=self.data['kv'],
-            pname='npf',
             **self.options.get('npf', {}),
             )
 
@@ -433,7 +448,6 @@ class Modflow6Model(object):
         self.packages['ic'] = flopy.mf6.modflow.mfgwfic.ModflowGwfic(
             model=self.packages['gwf'], 
             strt=self.data['start'],
-            pname='ic',
             **self.options.get('ic', {}),
             )
 
@@ -441,7 +455,6 @@ class Modflow6Model(object):
         self.packages['rch'] = flopy.mf6.ModflowGwfrcha(
             model=self.packages['gwf'], 
             recharge=[self.data['recharge'],],
-            pname='rch',
             **self.options.get('rch', {}),
             )
 
@@ -449,7 +462,7 @@ class Modflow6Model(object):
         self.packages['chd'] = flopy.mf6.modflow.mfgwfchd.ModflowGwfchd(
             model=self.packages['gwf'], 
             stress_period_data={0: self.data['chd']},
-            pname='chd',
+            maxbound=self.maxbound['chd'],
             **self.options.get('chd', {}),
             )
 
@@ -458,7 +471,7 @@ class Modflow6Model(object):
             self.packages['drn'] = flopy.mf6.modflow.mfgwfdrn.ModflowGwfdrn(
                 self.packages['gwf'],
                 stress_period_data={0: self.data['drn']},
-                pname='drn',
+                maxbound=self.maxbound['drn'],
                 **self.options.get('drn', {}),
                 )
 
@@ -467,7 +480,7 @@ class Modflow6Model(object):
             self.packages['ghb'] = flopy.mf6.modflow.mfgwfghb.ModflowGwfghb(
                 self.packages['gwf'],
                 stress_period_data={0: self.data['ghb']},
-                pname='ghb',
+                maxbound=self.maxbound['ghb'],
                 **self.options.get('ghb', {}),
                 )
 
@@ -476,7 +489,7 @@ class Modflow6Model(object):
             self.packages['riv'] = flopy.mf6.modflow.mfgwfriv.ModflowGwfriv(
                 self.packages['gwf'],
                 stress_period_data={0: self.data['riv']},
-                pname='riv',
+                maxbound=self.maxbound['riv'],
                 **self.options.get('riv', {}),
                 )
 
@@ -485,7 +498,7 @@ class Modflow6Model(object):
             self.packages['wel'] = flopy.mf6.modflow.mfgwfwel.ModflowGwfwel(
                 self.packages['gwf'],
                 stress_period_data={0: self.data['wel']},
-                pname='wel',
+                maxbound=self.maxbound['wel'],               
                 **self.options.get('wel', {}),
                 )
 
@@ -494,7 +507,6 @@ class Modflow6Model(object):
             self.packages['gwf'],            
             head_filerecord=[self.headsfile, ],
             budget_filerecord=[self.budgetfile, ],
-            pname='oc',
             **self.options.get('oc', {}),
             )
 

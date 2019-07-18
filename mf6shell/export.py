@@ -8,6 +8,12 @@ from affine import Affine
 import numpy as np
 import flopy
 
+import logging
+import os
+
+
+log = logging.getLogger(os.path.basename(__file__))
+
 def export_heads(headsfile, rasterfolder, transform,
     noflow=1e30,
     driver='GTiff',
@@ -20,6 +26,7 @@ def export_heads(headsfile, rasterfolder, transform,
     heads = np.ma.masked_equal(hds.get_data(), noflow)
 
     for ilay, iheads in enumerate(heads[::2]):
+        log.debug('exporting heads layer {ilay:d}'.format(ilay=ilay + 1))
         rasterfile = rasterfolder / 'heads_l{ilay:02d}.tif'.format(
             ilay=ilay + 1,
             )

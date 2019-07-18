@@ -19,4 +19,5 @@ def save_float(datfile, array):
 
 
 def save_array(datfile, array, fmt, delimiter=''):
+    log.debug('saving array to {f.name:}'.format(f=datfile))
     np.savetxt(datfile, array, fmt=fmt, delimiter=delimiter)
