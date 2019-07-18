@@ -1,0 +1,35 @@
+# model name
+name: mf6gron_ext
+
+# model workspace
+workspace: output
+
+# grid
+grid: {
+  nrow: 400,
+  ncol: 400,
+  delr: 25.,
+  delc: 25.,
+  xmin: 228_750.,
+  ymin: 576_000.,
+  }
+
+# number of layers
+nlay: 11
+
+# data sources
+datasources: [
+  {name: idomain, value: 1, format: scalar},
+  {name: top, file: 'data\topbot\RL{ilay:d}.tif', format: raster, layered: True},
+  {name: bot, file: 'data\topbot\TH{ilay:d}.tif', format: raster, layered: True},
+  {name: kd, file: 'data\kdc\TX{ilay:d}.tif', format: raster, layered: True},
+  {name: c, file: 'data\kdc\CL{ilay:d}.tif', format: raster, layered: True},
+  {name: start, file: 'data\startingheads\HH{ilay:d}.tif', format: raster, layered: True},
+  {name: recharge, file: 'data\recharge\RP1.tif', format: raster},
+  {name: wells, file: 'data\wells\sq_list.csv', format: table},
+  ]
+
+# package options
+package_options: {
+
+  }

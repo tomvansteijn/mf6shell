@@ -73,4 +73,4 @@ class RegularGrid(Grid):
     @property
     def transform(self) -> Tuple[float, float, float, float, float, float]:
         """Affine transformation consistent with GDAL"""
-        return self.xmin, self.delc, 0., self.ymax, 0., -self.delr 
+        return self.xmin, self.delc, 0., self.ymax, 0., -self.delr

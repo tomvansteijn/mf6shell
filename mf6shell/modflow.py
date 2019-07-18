@@ -2,8 +2,14 @@
 # -*- coding: utf-8 -*-
 # Tom van Steijn, Royal HaskoningDHV
 
+from mf6shell.boundary import get_square_boundary, get_idomain_boundary
+from mf6shell.datafiles import save_float, save_int, save_array
+from mf6shell.wells import get_wells_within_grid
+
+import numpy as np
 import flopy
 
+from typing import Tuple, Dict
 from pathlib import Path
 import logging
 import os
@@ -14,149 +20,489 @@ log = logging.getLogger(os.path.basename(__file__))
 
 class Modflow6Model(object):
     def __init__(self,
-        basemodel,
+        model,
         workspace,
         exe_name,
+        datafolder=None,
         packages=None,
-        datafiles=None,
+        data=None,
         options=None,
+        namefile=None,
+        headsfile=None,
+        budgetfile=None,
         ) -> None:
-        self.basemodel = basemodel
+
+        self.model = model
         self.workspace = Path(workspace)
         self.exe_name = Path(exe_name)
+
+        if datafolder is not None:
+            self.datafolder = Path(datafolder)
+        else:
+            self.datafolder = self.workspace / 'data'
+
         self.packages = packages or {}
-        self.datafiles = datafiles or {}
+        self.data = data or {}
         self.options = options or {}
 
-    def write_external_datafiles(self) -> None:
-        pass
+        # input and output filenames
+        self.namefile = (
+            namefile or '{name:}.nam'.format(name=self.model.name)
+            )
+        self.headsfile = (
+            headsfile or '{name:}.hds'.format(name=self.model.name)
+            )
+        self.budgetfile = (
+            budgetfile or '{name:}.cbc'.format(name=self.model.name)
+            )
+
+    def _get_file_ext(self, datfile):
+        return {'filename': str(datfile.relative_to(self.workspace))}
+
+    def write_top(self, ilay=1, fill_value=0.) -> None:
+        # read from parameter
+        top = self.model.parameters['top'][ilay].get_data()
+
+        # fill masked with fill value
+        top = top.filled(fill_value)
+
+        # write to data file
+        topdatfile = self.datafolder / 'top.dat'
+        save_float(topdatfile, top)
+
+        # add file reference to self.data
+        self.data['top'] = self._get_file_ext(topdatfile)
+
+    def write_botm(self, fill_value=1e-6) -> None:
+        self.data['botm'] = []
+        for ilay in range(self.model.nlay):
+            botm = (
+                self.model.parameters['bot'][ilay + 1].get_data()
+                )
+
+            # fill masked with fill value
+            botm = botm.filled((2*ilay + 1) * -fill_value)
+            botmdatfile = self.datafolder / 'botm_l{ilay:02d}.dat'.format(
+                ilay=ilay*2 + 1,
+                )
+            save_float(botmdatfile, botm)
+            self.data['botm'].append(self._get_file_ext(botmdatfile))
+            if (ilay + 1) < self.model.nlay:
+                botm = (
+                    self.model.parameters['top'][ilay + 2].get_data()
+                    )
+
+                # fill masked with fill value
+                botm = botm.filled((2*ilay + 2) * -fill_value)
+
+                botmdatfile = self.datafolder / 'botm_l{ilay:02d}.dat'.format(
+                    ilay=ilay*2 + 2,
+                    )
+                save_float(botmdatfile, botm)
+                self.data['botm'].append(self._get_file_ext(botmdatfile))
+
+    def write_idomain(self) -> None:
+        if self.model.parameters['idomain'].is_constant():
+            self.data['idomain'] = self.model.parameters['idomain'].value
+        else:
+            # read from parameter
+            idomain = self.model.parameters['idomain'].get_data()
+
+            # fill masked with fill value
+            idomain = idomain.filled(fill_value)
+
+            # write to data file
+            idomaindatfile = self.datafolder / 'idomain.dat'
+            save_int(idomaindatfile, idomain)
+
+            # add file reference to self.data
+            self.data['idomain'] = self._get_file_ext(idomaindatfile)
+
+    def write_kh(self, fill_value=1e-6) -> None:
+        self.data['kh'] = []
+        for ilay in range(self.model.nlay):
+            kd = self.model.parameters['kd'][ilay + 1].get_data()
+
+            # convert to kh
+            top = self.model.parameters['top'][ilay + 1].get_data()
+            bot = self.model.parameters['bot'][ilay + 1].get_data()
+            kh = kd / (top - bot)
+
+            # fill with low value
+            kh = kh.filled(fill_value)
+
+            khdatfile = self.datafolder / 'kh_l{ilay:02d}.dat'.format(
+                ilay=ilay*2 + 1,
+                )
+            save_float(khdatfile, kh)
+            self.data['kh'].append(self._get_file_ext(khdatfile))
+
+            if (ilay + 1) < self.model.nlay:
+                # dummy values
+                self.data['kh'].append(fill_value)
+
+    def write_kv(self, fill_value=1e6) -> None:
+        self.data['kv'] = []
+        for ilay in range(self.model.nlay):
+            # dummy values
+            self.data['kv'].append(fill_value)
+
+            if (ilay + 1) < self.model.nlay:
+                c = self.model.parameters['c'][ilay + 1].get_data()
+
+                # convert to kv            
+                bot = self.model.parameters['bot'][ilay + 1].get_data()
+                top = self.model.parameters['top'][ilay + 2].get_data()
+                kv = (bot - top) / c
+
+                # fill with high value
+                kv = kv.filled(fill_value)
+
+                kvdatfile = self.datafolder / 'kv_l{ilay:02d}.dat'.format(
+                    ilay=ilay*2 + 2,
+                    )
+                save_float(kvdatfile, kv)
+                self.data['kv'].append(self._get_file_ext(kvdatfile))
+
+    def write_start(self, fill_value=0.) -> None:
+        self.data['start'] = []
+        for ilay in range(self.model.nlay):
+            start = self.model.parameters['start'][ilay + 1].get_data()
+
+            # fill with fill_value
+            start = start.filled(fill_value)
+
+            startdatfile = self.datafolder / 'start_l{ilay:02d}.dat'.format(
+                ilay=ilay*2 + 1,
+                )
+            save_float(startdatfile, start)
+            self.data['start'].append(self._get_file_ext(startdatfile))
+            if (ilay + 1) < self.model.nlay:
+                self.data['start'].append(self._get_file_ext(startdatfile))
+
+    def write_recharge(self, fill_value=0.) -> None:
+        # read from parameter
+        recharge = self.model.parameters['recharge'].get_data()
+
+        # fill masked with fill value
+        recharge = recharge.filled(fill_value)
+
+        # write to data file
+        rechargedatfile = self.datafolder / 'recharge.dat'
+        save_float(rechargedatfile, recharge)
+
+        # add file reference to self.data
+        self.data['recharge'] = self._get_file_ext(rechargedatfile)
+
+    def write_chd(self, fill_value=0.) -> None:
+        if self.model.parameters['idomain'].is_constant():
+            chd_row, chd_col = get_square_boundary(*self.model.grid.shape)
+        else:
+            chd_row, chd_col = get_idomain_boundary(idomain)
+
+        chd_data = []
+        for ilay in range(self.model.nlay3d):
+            start = self.model.parameters['start'][ilay//2 + 1].get_data()
+
+            # fill with fill_value
+            start = start.filled(fill_value)
+
+            # get boundary values
+            chd_values = start[chd_row, chd_col]
+
+            # expand ilay to vector
+            ilay_c = np.ones_like(chd_row, dtype=np.int) * ilay
+
+            # combine in record array
+            chd_array = np.rec.fromarrays(
+                [ilay_c + 1, chd_row + 1, chd_col + 1, chd_values],
+                names=['ilay', 'row', 'col', 'value'],
+                )
+
+            # append
+            chd_data.append(chd_array)
+
+        # concatenate
+        chd_data = np.concatenate(chd_data)
+
+        # write to data file
+        chddatfile = self.datafolder / 'chd.dat'
+        save_array(chddatfile, chd_data, fmt='  %i %i %i %16.8f')
+
+        # add file reference to self.data
+        self.data['chd'] = self._get_file_ext(chddatfile)
+
+    def write_topsys(self, fill_value=0.):
+        topsys_data = self.model.parameters['topsys'].get_data()
+
+        # drain package
+        drn_columns = ['ilay', 'row', 'col', 'head', 'cond']
+
+        # select drain data 
+        select_drn = topsys_data.loc[:, 'inffact'] < 1.
+
+        # return if no selection
+        if select_drn.sum() == 0:
+            return
+
+        # select and copy rows
+        drn_data = topsys_data.loc[select_drn, :].copy()
+
+        # update conductivity with infiltration factor
+        drn_data.loc[:, 'cond'] = (
+            drn_data.loc[:, 'cond'] * (1. - drn_data.loc[:, 'inffact'])
+            )
+
+        # clip conductivity at zero
+        drn_data.loc[:, 'cond'] = drn_data.loc[:, 'cond'].clip(lower=0.)
+
+        # convert layer number to full3d (1 -> 1, 2 -> 3, 3 -> 5, etc.)
+        drn_data.loc[:, 'ilay'] = drn_data.loc[:, 'ilay'] * 2 - 1
+
+        # write to data file
+        drndatfile = self.datafolder / 'drn.dat'
+        save_array(drndatfile, drn_data.loc[:, drn_columns],
+            fmt='  %i %i %i %16.8f %16.8f',
+            )
+
+        # add file reference to self.data
+        self.data['drn'] = self._get_file_ext(drndatfile)
+
+        # ghb package
+        ghb_columns = ['ilay', 'row', 'col', 'head', 'cond']
+        
+        # select ghb data 
+        select_ghb = (
+            topsys_data.loc[:, 'rbot'].isna() &
+            (topsys_data.loc[:, 'inffact'] > 0.)
+            )
+
+        # return if no selection
+        if select_ghb.sum() == 0:
+            return
+
+        # select and copy rows
+        ghb_data = topsys_data.loc[select_ghb, :].copy()
+        
+        # update conductivity with infiltration factor
+        ghb_data.loc[:, 'cond'] = (
+            ghb_data.loc[:, 'cond'] * ghb_data.loc[:, 'inffact']
+            )
+
+        # clip conductivity at zero
+        ghb_data.loc[:, 'cond'] = ghb_data.loc[:, 'cond'].clip(lower=0.)
+
+        # convert layer number to full3d (1 -> 1, 2 -> 3, 3 -> 5, etc.)
+        ghb_data.loc[:, 'ilay'] = ghb_data.loc[:, 'ilay'] * 2 - 1
+
+        # write to data file
+        ghbdatfile = self.datafolder / 'ghb.dat'
+        save_array(ghbdatfile, ghb_data.loc[:, ghb_columns],
+            fmt='  %i %i %i %16.8f %16.8f',
+            )
+
+        # add file reference to self.data
+        self.data['ghb'] = self._get_file_ext(ghbdatfile)
+
+        # riv package
+        riv_columns = ['ilay', 'row', 'col', 'head', 'cond', 'rbot']
+        
+        # select riv data 
+        select_riv = (
+            topsys_data.loc[:, 'rbot'].notna() &
+            (topsys_data.loc[:, 'inffact'] > 0.)
+            )
+
+        # return if no selection
+        if select_riv.sum() == 0:
+            return
+
+        # select and copy rows
+        riv_data = topsys_data.loc[select_riv, :].copy()
+        
+        # update conductivity with infiltration factor
+        riv_data.loc[:, 'cond'] = (
+            riv_data.loc[:, 'cond'] * riv_data.loc[:, 'inffact']
+            )
+
+        # clip conductivity at zero
+        riv_data.loc[:, 'cond'] = riv_data.loc[:, 'cond'].clip(lower=0.)
+
+        # convert layer number to full3d (1 -> 1, 2 -> 3, 3 -> 5, etc.)
+        riv_data.loc[:, 'ilay'] = riv_data.loc[:, 'ilay'] * 2 - 1
+
+        # write to data file
+        rivdatfile = self.datafolder / 'riv.dat'
+        save_array(rivdatfile, riv_data.loc[:, riv_columns],
+            fmt='  %i %i %i %16.8f %16.8f %16.8f',
+            )
+
+        # add file reference to self.data
+        self.data['riv'] = self._get_file_ext(rivdatfile)
+
+
+    def write_wel(self) -> None:
+        wel_data = self.model.parameters['wells'].get_data()
+
+        # get row, column in grid
+        wel_data = get_wells_within_grid(wel_data, self.model.grid, 'x', 'y')
+
+        # select layer numbers, row, column & pumping rates
+        wel_data = wel_data.loc[:, ['ilay', 'row', 'col', 'q_assigned']]
+        wel_data.loc[:, 'ilay'] = wel_data.loc[:, 'ilay'] * 2 - 1
+        wel_data.loc[:, ['row', 'col']] += 1
+
+        # write to data file
+        weldatfile = self.datafolder / 'wel.dat'
+        save_array(weldatfile, wel_data.values, fmt='  %i %i %i %16.8f')
+
+        # add file reference to self.data
+        self.data['wel'] = self._get_file_ext(weldatfile)
+
+
+    def write_data(self) -> None:
+        # create data folder
+        self.datafolder.mkdir(exist_ok=True)
+
+        # write data per package
+        self.write_top()
+        self.write_botm()
+        self.write_idomain()
+        self.write_kh()
+        self.write_kv()
+        self.write_start()
+        self.write_recharge()
+        self.write_chd()
+        self.write_topsys()
+        self.write_wel()
 
     def create_simulation_packages(self) -> None:
-        # Create the Flopy simulation object
+        # create the Flopy simulation object
         self.packages['sim'] = flopy.mf6.MFSimulation(
-            sim_name=self.basemodel.name,
+            sim_name=self.model.name,
             exe_name=str(self.exe_name), 
             sim_ws=str(self.workspace),
             **self.options.get('sim', {}),
             )
 
-        # Create the Flopy temporal discretization object
+        # create the Flopy temporal discretization object
         self.packages['tdis'] = flopy.mf6.modflow.mftdis.ModflowTdis(
             self.packages['sim'],
             **self.options.get('tdis', {}),
             )
 
-        # Create the Flopy groundwater flow (gwf) model object
+        # create the Flopy groundwater flow (gwf) model object
         self.packages['gwf'] = flopy.mf6.ModflowGwf(
             self.packages['sim'],
-            modelname=self.basemodel.name, 
-            model_nam_file='{name:}.nam'.format(name=self.basemodel.name),
+            modelname=self.model.name, 
+            model_nam_file=self.namefile,
             **self.options.get('gwf', {}),
             )
 
-        # Create the Flopy iterative model solver (ims) Package object
+        # create the Flopy iterative model solver (ims) Package object
         self.packages['ims'] = flopy.mf6.modflow.mfims.ModflowIms(
             self.packages['sim'],
+            pname='ims',
             **self.options.get('ims', {}),
             )
 
     def create_model_packages(self) -> None:
-        # Create the DIS package
+        # create the DIS package
         self.packages['dis'] = flopy.mf6.modflow.mfgwfdis.ModflowGwfdis(
             self.packages['gwf'],
-            nlay=self.basemodel.nlay3d,
-            nrow=self.basemodel.grid.nrow, ncol=self.basemodel.grid.ncol,
-            delr=self.basemodel.grid.delr, delc=self.basemodel.grid.delc,
-            top=top_ext, botm=botm_ext,
-            idomain=idomain_ext,
+            nlay=self.model.nlay3d,
+            nrow=self.model.grid.nrow, ncol=self.model.grid.ncol,
+            delr=self.model.grid.delr, delc=self.model.grid.delc,
+            top=self.data['top'], botm=self.data['botm'],
+            idomain=self.data['idomain'],
+            pname='dis',
             **self.options.get('dis', {}),
             )
 
-        # Create the NPF package
+        # create the NPF package
         self.packages['npf'] = flopy.mf6.modflow.mfgwfnpf.ModflowGwfnpf(
             model=self.packages['gwf'],
-            k=kh_ext,
-            k22=kh_ext,
-            k33=kv_ext,
+            k=self.data['kh'],
+            k22=self.data['kh'],
+            k33=self.data['kv'],
+            pname='npf',
             **self.options.get('npf', {}),
             )
 
-        # Create the initial conditions package
+        # create the initial conditions package
         self.packages['ic'] = flopy.mf6.modflow.mfgwfic.ModflowGwfic(
             model=self.packages['gwf'], 
-            strt=start_ext,
+            strt=self.data['start'],
+            pname='ic',
             **self.options.get('ic', {}),
             )
 
-        # Create the CHD package
-        self.packages['chd'] = flopy.mf6.modflow.mfgwfchd.ModflowGwfchd(
-            model=self.packages['gwf'], 
-            maxbound=len(chd_data),
-            stress_period_data=chd_ext,
-            **self.options.get('dis', {}),
-            )
-
-        # initialize the RCH package
+        # create the RCH package
         self.packages['rch'] = flopy.mf6.ModflowGwfrcha(
             model=self.packages['gwf'], 
-            recharge=recharge_ext,
+            recharge=[self.data['recharge'],],
+            pname='rch',
             **self.options.get('rch', {}),
             )
 
-        # initialize the DRN package
-        self.packages['drn'] = flopy.mf6.modflow.mfgwfdrn.ModflowGwfdrn(
-            self.packages['gwf'],
-            maxbound=drn_data.shape[0],
-            stress_period_data=drn_ext,
-            **self.options.get('drn', {}),
+        # create the CHD package
+        self.packages['chd'] = flopy.mf6.modflow.mfgwfchd.ModflowGwfchd(
+            model=self.packages['gwf'], 
+            stress_period_data={0: self.data['chd']},
+            pname='chd',
+            **self.options.get('chd', {}),
             )
 
-        # initialize the GHB package
-        self.packages['ghb'] = flopy.mf6.modflow.mfgwfghb.ModflowGwfghb(
-            self.packages['gwf'],
-            maxbound=ghb_data.shape[0],
-            stress_period_data=ghb_ext,
-            **self.options.get('ghb', {}),
-            )
+        # create the DRN package
+        if 'drn' in self.data:
+            self.packages['drn'] = flopy.mf6.modflow.mfgwfdrn.ModflowGwfdrn(
+                self.packages['gwf'],
+                stress_period_data={0: self.data['drn']},
+                pname='drn',
+                **self.options.get('drn', {}),
+                )
 
-        # initialize the RIV package
-        self.packages['riv'] = flopy.mf6.modflow.mfgwfriv.ModflowGwfriv(
-            self.packages['gwf'],
-            maxbound=riv_data.shape[0],
-            stress_period_data=riv_ext,
-            **self.options.get('riv', {}),
-            )
+        # create the GHB package
+        if 'ghb' in self.data:
+            self.packages['ghb'] = flopy.mf6.modflow.mfgwfghb.ModflowGwfghb(
+                self.packages['gwf'],
+                stress_period_data={0: self.data['ghb']},
+                pname='ghb',
+                **self.options.get('ghb', {}),
+                )
 
-        # initialize WEL package
-        self.packages['wel'] = flopy.mf6.modflow.mfgwfwel.ModflowGwfwel(
-            self.packages['gwf'],
-            maxbound=len(wel_data),
-            stress_period_data=wel_ext,
-            **self.options.get('wel', {}),
-            )
+        # create the RIV package
+        if 'riv' in self.data:
+            self.packages['riv'] = flopy.mf6.modflow.mfgwfriv.ModflowGwfriv(
+                self.packages['gwf'],
+                stress_period_data={0: self.data['riv']},
+                pname='riv',
+                **self.options.get('riv', {}),
+                )
 
-        # Create the output control package
-        headfile = '{}.hds'.format(self.basemodel.name)
-        head_filerecord = [headfile]
-        budgetfile = '{}.cbb'.format(self.basemodel.name)
-        budget_filerecord = [budgetfile]
-        saverecord = [('HEAD', 'ALL'), 
-                      ('BUDGET', 'ALL')]
-        printrecord = [('HEAD', 'LAST')]
+        # create WEL package
+        if 'wel' in self.data:
+            self.packages['wel'] = flopy.mf6.modflow.mfgwfwel.ModflowGwfwel(
+                self.packages['gwf'],
+                stress_period_data={0: self.data['wel']},
+                pname='wel',
+                **self.options.get('wel', {}),
+                )
+
+        # create the output control package
         self.packages['oc'] = flopy.mf6.modflow.mfgwfoc.ModflowGwfoc(
             self.packages['gwf'],            
-            head_filerecord=head_filerecord,
-            budget_filerecord=budget_filerecord,
-            saverecord=saverecord, 
-            printrecord=printrecord,
+            head_filerecord=[self.headsfile, ],
+            budget_filerecord=[self.budgetfile, ],
+            pname='oc',
             **self.options.get('oc', {}),
             )
 
     def write_simulation(self) -> None:
         self.packages['sim'].write_simulation()
 
-    def run_model(self) -> bool, list:
-        return self.packages['sim'].run_model()
+    def run_simulation(self) -> Tuple[bool, list]:
+        return self.packages['sim'].run_simulation()
 
 
 
