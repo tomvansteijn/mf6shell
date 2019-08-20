@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 # Tom van Steijn, Royal HaskoningDHV
 
-from mf6shell.grid import RegularGrid
-from mf6shell.datasources import DataSource
+from mf6shell.adofiles import polygongrid_from_teo
+from mf6shell.parameters import Parameter
 from mf6shell.model import Quasi3DModel
-from mf6shell.modflow import Modflow6ModelWriter
+from mf6shell.modflow import Modflow6Model
 from mf6shell.export import export_heads
 
 from collections import ChainMap
@@ -25,52 +25,51 @@ def get_parser() -> argparse.ArgumentParser:
         )
 
     # Command line arguments
-    parser.add_argument('inputfile', type=str,
-        help=('YAML input file containing keyword arguments'))
+    parser.add_argument('teofile', type=str,
+        help=('grid definition in teofile'))
+    parser.add_argument('flifile', type=str,
+        help=('parameter listing in fli file'))
+    parser.add_argument('workspace', type=str, default='.'
+        help=('model workspace folder path'))
+    parser.add_argument('exe_name', type=str, 
+        help=('filepath Modflow 6 executable'))
     return parser
 
 
 def run(**kwargs) -> None:
     # unpack input from kwargs
-    name = kwargs['name']
+    flifile = Path(kwargs['flifile'])
+    teofile = Path(kwargs['teofile'])
     workspace = Path(kwargs['workspace'])
     exe_name = Path(kwargs['exe_name'])
-    grid = kwargs['grid']
-    nlay = kwargs['nlay']
-    datasources = [DataSource(**ds) for ds in kwargs['datasources']]
-    run_options = kwargs['run_options']
     config = kwargs['config']
 
     # create output directory if it does not exist
     workspace.mkdir(exist_ok=True)
 
-    # create grid object
-    grid = RegularGrid(**grid)
+    # read teo file
+    grid = polygongrid_from_teo(teofile)
 
-    # read parameters, expand by layer and add to parameters dict
+    # read fli file
+    fli = FliFile.from_file(flifile)
+    parameters = 
+
+    # read parameters and add to parameters dict
     parameters = {}
-    for datasource in datasources:
-        parameter_name = datasource.name
-        if datasource.layered:
-            parameters[parameter_name] = []
-            for layer in range(nlay):
-                parameters[parameter_name].append(
-                    datasource.to_parameter(layer=layer)
-                    )
-        elif datasource.layer is not None:
-            if parameter not in parameters:
-                parameters[parameter_name] = []
-            parameters[parameter_name].append(
-                datasource.to_parameter(layer=layer)
-                )
+    for parameter in fli.parameters:
+        parameter = AdoParameter(**parameter)
+        if parameter.layered:
+            parameters[parameter.name] = {}
+            for iparameter in parameter.expand(nlay):
+                parameters[parameter.name][iparameter.ilay] = iparameter
         else:
-            parameters[parameter_name] = datasource.to_parameter()
+            parameters[parameter.name] = parameter
 
     # create basemodel object
     basemodel = Quasi3DModel(name, grid, nlay, parameters)
 
     # define modflow 6 model
-    mf6model = Modflow6ModelWriter(basemodel, workspace, exe_name,
+    mf6model = Modflow6Model(basemodel, workspace, exe_name,
         options=config.get('package_options'),
         )
 
@@ -106,9 +105,7 @@ def run(**kwargs) -> None:
 def main():
     # arguments from input file
     args = get_parser().parse_args()
-    with open(args.inputfile) as y:
-        kwargs = yaml.load(y)
-        kwargs['inputfile'] = args.inputfile
+    kwargs = vars(args)
 
     # read default config
     scripts_folder = os.path.dirname(os.path.realpath(__file__))

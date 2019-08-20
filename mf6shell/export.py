@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Tom van Steijn, Royal HaskoningDHV
 
-from mf6shell.rasterfiles import write_array
+from mf6shell.rasterfiles import write_raster
 
 from affine import Affine
 import numpy as np
@@ -25,10 +25,10 @@ def export_heads(headsfile, rasterfolder, transform,
     hds = flopy.utils.binaryfile.HeadFile(headsfile)
     heads = np.ma.masked_equal(hds.get_data(), noflow)
 
-    for ilay, iheads in enumerate(heads[::2]):
-        log.debug('exporting heads layer {ilay:d}'.format(ilay=ilay + 1))
-        rasterfile = rasterfolder / 'heads_l{ilay:02d}.tif'.format(
-            ilay=ilay + 1,
+    for layer, iheads in enumerate(heads[::2]):
+        log.debug('exporting heads layer {layer:d}'.format(layer=layer + 1))
+        rasterfile = rasterfolder / 'heads_l{layer:02d}.tif'.format(
+            layer=layer + 1,
             )
 
         width, height = iheads.shape
@@ -41,7 +41,7 @@ def export_heads(headsfile, rasterfolder, transform,
             'dtype': iheads.dtype,
             }
 
-        write_array(rasterfile, iheads, profile)
+        write_raster(rasterfile, iheads, profile)
 
 
 

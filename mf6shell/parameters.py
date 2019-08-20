@@ -3,83 +3,75 @@
 # Tom van Steijn, Royal HaskoningDHV
 
 from mf6shell.mixins import AsDictMixin, CopyMixin, ReprMixin
-from mf6shell.csvfiles import read_topsys, read_wells
-from mf6shell.rasterfiles import read_array
+from mf6shell.adofiles import read_ado
+from mf6shell.csvfiles import TableSchema, read_table
+from mf6shell.rasterfiles import read_raster
 
 from typing import Iterable
 from pathlib import Path
-from enum import Enum
 import logging
 import os
 
 log = logging.getLogger(os.path.basename(__file__))
 
 
-class ParameterFormat(Enum):
-    constant = 1
-    raster = 2
-    table = 3
-
-
 class Parameter(AsDictMixin, CopyMixin, ReprMixin):
     def __init__(self,
         name,
-        format_,
-        file=None,
-        value=None,
-        ilay=None,
-        layered=False,
-        ) -> None:
+        layer=None,
+        ):
         self.name = name
-        self.format = ParameterFormat[format_]
-        self.file = Path(file) if file is not None else None
-        self.value = value
-        self.ilay = ilay        
-        self.layered = layered
+        self.layer = layer
 
     def __str__(self):
         return ('{s.__class__.__name__:}('
             'name={s.name:}, '
-            'format={s.format:}, '
-            'ilay={s.ilay:}'
+            'layer={s.layer:}'
             ')').format(s=self)
 
     def is_constant(self):
-        return self.format is ParameterFormat.constant
+        return False
 
-    def expand(self, nlay) -> Iterable['Parameter']:
-        for ilay in range(nlay):
+    def get_value(self):
+        raise NotImplementedError('Not implemented in this class')
 
-            # get a fresh copy
-            iparameter = self.copy()
 
-            # format filename using layer number
-            iparameter.file = (
-                iparameter.file.parent / iparameter.file.name.format(
-                    ilay=ilay + 1,
-                    )
-                )
+class ConstantParameter(Parameter):
+    def __init__(self, name, value, layer=None):
+        super().__init__(name, layer)
+        self.value = value
 
-            # set ilay
-            iparameter.ilay = ilay + 1
+    def is_constant(self):
+        return True
 
-            # set layered to false
-            iparameter.layered = False
+    def get_value(self):
+        return self.value
 
-            # yield fresh parameter
-            yield iparameter
 
-    def get_data(self):
-        if self.format is ParameterFormat.raster:
-            return read_array(self.file)
-        elif self.format is ParameterFormat.table:
-            if self.name == 'topsys':
-                return read_topsys(self.file)
-            elif self.name == 'wells':
-                return read_wells(self.file)
-            else:
-                pass
-        else:
-            pass
+class FileParameter(Parameter):
+    def __init__(self, name, filepath, layer=None):
+        super().__init__(name, layer)
+        self.filepath = Path(filepath)
 
-            
+
+class RasterParameter(FileParameter):
+    def get_value(self):
+        return read_raster(self.filepath)
+
+
+class AdoParameter(FileParameter):
+    def __init__(self, name, filepath, block_name, layer=None):
+        super().__init__(name, filepath, layer)
+        self.block_name = block_name
+
+    def get_value(self):
+        return read_ado(self.filepath, self.block_name)
+
+
+class TableParameter(FileParameter):
+    def __init__(self, name, filepath, schema, layer=None):
+        super().__init__(name, filepath, layer)
+        self.schema = TableSchema[schema]
+
+    def get_value(self):
+        return read_table(self.filepath, self.schema)

@@ -18,7 +18,7 @@ import os
 log = logging.getLogger(os.path.basename(__file__))
 
 
-class Modflow6Model(object):
+class Modflow6ModelWriter(object):
     def __init__(self,
         model,
         workspace,
@@ -61,9 +61,9 @@ class Modflow6Model(object):
     def _get_file_ext(self, datfile):
         return {'filename': str(datfile.relative_to(self.workspace))}
 
-    def write_top(self, ilay=1, fill_value=0.) -> None:
+    def write_top(self, layer=0, fill_value=0.) -> None:
         # read from parameter
-        top = self.model.parameters['top'][ilay].get_data()
+        top = self.model.parameters['top'][layer].get_value()
 
         # fill masked with fill value
         top = top.filled(fill_value)
@@ -77,28 +77,28 @@ class Modflow6Model(object):
 
     def write_botm(self, fill_value=1e-6) -> None:
         self.data['botm'] = []
-        for ilay in range(self.model.nlay):
+        for layer in range(self.model.nlay):
             botm = (
-                self.model.parameters['bot'][ilay + 1].get_data()
+                self.model.parameters['bot'][layer].get_value()
                 )
 
             # fill masked with fill value
-            botm = botm.filled((2*ilay + 1) * -fill_value)
-            botmdatfile = self.datafolder / 'botm_l{ilay:02d}.dat'.format(
-                ilay=ilay*2 + 1,
+            botm = botm.filled((2*layer + 1) * -fill_value)
+            botmdatfile = self.datafolder / 'botm_l{layer:02d}.dat'.format(
+                layer=layer*2 + 1,
                 )
             save_float(botmdatfile, botm)
             self.data['botm'].append(self._get_file_ext(botmdatfile))
-            if (ilay + 1) < self.model.nlay:
+            if (layer + 1) < self.model.nlay:
                 botm = (
-                    self.model.parameters['top'][ilay + 2].get_data()
+                    self.model.parameters['top'][layer + 1].get_value()
                     )
 
                 # fill masked with fill value
-                botm = botm.filled((2*ilay + 2) * -fill_value)
+                botm = botm.filled((2*layer + 2) * -fill_value)
 
-                botmdatfile = self.datafolder / 'botm_l{ilay:02d}.dat'.format(
-                    ilay=ilay*2 + 2,
+                botmdatfile = self.datafolder / 'botm_l{layer:02d}.dat'.format(
+                    layer=layer*2 + 2,
                     )
                 save_float(botmdatfile, botm)
                 self.data['botm'].append(self._get_file_ext(botmdatfile))
@@ -108,7 +108,7 @@ class Modflow6Model(object):
             self.data['idomain'] = self.model.parameters['idomain'].value
         else:
             # read from parameter
-            idomain = self.model.parameters['idomain'].get_data()
+            idomain = self.model.parameters['idomain'].get_value()
 
             # fill masked with fill value
             idomain = idomain.filled(fill_value)
@@ -122,69 +122,69 @@ class Modflow6Model(object):
 
     def write_kh(self, fill_value=1e-6) -> None:
         self.data['kh'] = []
-        for ilay in range(self.model.nlay):
-            kd = self.model.parameters['kd'][ilay + 1].get_data()
+        for layer in range(self.model.nlay):
+            kd = self.model.parameters['kd'][layer].get_value()
 
             # convert to kh
-            top = self.model.parameters['top'][ilay + 1].get_data()
-            bot = self.model.parameters['bot'][ilay + 1].get_data()
+            top = self.model.parameters['top'][layer].get_value()
+            bot = self.model.parameters['bot'][layer].get_value()
             kh = kd / (top - bot)
 
             # fill with low value
             kh = kh.filled(fill_value)
 
-            khdatfile = self.datafolder / 'kh_l{ilay:02d}.dat'.format(
-                ilay=ilay*2 + 1,
+            khdatfile = self.datafolder / 'kh_l{layer:02d}.dat'.format(
+                layer=layer*2 + 1,
                 )
             save_float(khdatfile, kh)
             self.data['kh'].append(self._get_file_ext(khdatfile))
 
-            if (ilay + 1) < self.model.nlay:
+            if (layer + 1) < self.model.nlay:
                 # dummy values
                 self.data['kh'].append(fill_value)
 
     def write_kv(self, fill_value=1e6) -> None:
         self.data['kv'] = []
-        for ilay in range(self.model.nlay):
+        for layer in range(self.model.nlay):
             # dummy values
             self.data['kv'].append(fill_value)
 
-            if (ilay + 1) < self.model.nlay:
-                c = self.model.parameters['c'][ilay + 1].get_data()
+            if (layer + 1) < self.model.nlay:
+                c = self.model.parameters['c'][layer].get_value()
 
                 # convert to kv            
-                bot = self.model.parameters['bot'][ilay + 1].get_data()
-                top = self.model.parameters['top'][ilay + 2].get_data()
+                bot = self.model.parameters['bot'][layer].get_value()
+                top = self.model.parameters['top'][layer + 1].get_value()
                 kv = (bot - top) / c
 
                 # fill with high value
                 kv = kv.filled(fill_value)
 
-                kvdatfile = self.datafolder / 'kv_l{ilay:02d}.dat'.format(
-                    ilay=ilay*2 + 2,
+                kvdatfile = self.datafolder / 'kv_l{layer:02d}.dat'.format(
+                    layer=layer*2 + 2,
                     )
                 save_float(kvdatfile, kv)
                 self.data['kv'].append(self._get_file_ext(kvdatfile))
 
     def write_start(self, fill_value=0.) -> None:
         self.data['start'] = []
-        for ilay in range(self.model.nlay):
-            start = self.model.parameters['start'][ilay + 1].get_data()
+        for layer in range(self.model.nlay):
+            start = self.model.parameters['start'][layer].get_value()
 
             # fill with fill_value
             start = start.filled(fill_value)
 
-            startdatfile = self.datafolder / 'start_l{ilay:02d}.dat'.format(
-                ilay=ilay*2 + 1,
+            startdatfile = self.datafolder / 'start_l{layer:02d}.dat'.format(
+                layer=layer*2 + 1,
                 )
             save_float(startdatfile, start)
             self.data['start'].append(self._get_file_ext(startdatfile))
-            if (ilay + 1) < self.model.nlay:
+            if (layer + 1) < self.model.nlay:
                 self.data['start'].append(self._get_file_ext(startdatfile))
 
     def write_recharge(self, fill_value=0.) -> None:
         # read from parameter
-        recharge = self.model.parameters['recharge'].get_data()
+        recharge = self.model.parameters['recharge'].get_value()
 
         # fill masked with fill value
         recharge = recharge.filled(fill_value)
@@ -203,8 +203,8 @@ class Modflow6Model(object):
             chd_row, chd_col = get_idomain_boundary(idomain)
 
         chd_data = []
-        for ilay in range(self.model.nlay3d):
-            start = self.model.parameters['start'][ilay//2 + 1].get_data()
+        for layer in range(self.model.nlay3d):
+            start = self.model.parameters['start'][layer//2].get_value()
 
             # fill with fill_value
             start = start.filled(fill_value)
@@ -212,13 +212,13 @@ class Modflow6Model(object):
             # get boundary values
             chd_values = start[chd_row, chd_col]
 
-            # expand ilay to vector
-            ilay_c = np.ones_like(chd_row, dtype=np.int) * ilay
+            # expand layer to vector
+            layer_c = np.ones_like(chd_row, dtype=np.int) * layer
 
             # combine in record array
             chd_array = np.rec.fromarrays(
-                [ilay_c + 1, chd_row + 1, chd_col + 1, chd_values],
-                names=['ilay', 'row', 'col', 'value'],
+                [layer_c + 1, chd_row + 1, chd_col + 1, chd_values],
+                names=['layer', 'row', 'col', 'value'],
                 )
 
             # append
@@ -238,10 +238,10 @@ class Modflow6Model(object):
         self.maxbound['chd'] = len(chd_data)
 
     def write_topsys(self, fill_value=0.):
-        topsys_data = self.model.parameters['topsys'].get_data()
+        topsys_data = self.model.parameters['topsys'].get_value()
 
         # drain package
-        drn_columns = ['ilay', 'row', 'col', 'head', 'cond']
+        drn_columns = ['layer', 'row', 'col', 'head', 'cond']
 
         # select drain data 
         select_drn = topsys_data.loc[:, 'inffact'] < 1.
@@ -262,7 +262,7 @@ class Modflow6Model(object):
         drn_data.loc[:, 'cond'] = drn_data.loc[:, 'cond'].clip(lower=0.)
 
         # convert layer number to full3d (1 -> 1, 2 -> 3, 3 -> 5, etc.)
-        drn_data.loc[:, 'ilay'] = drn_data.loc[:, 'ilay'] * 2 - 1
+        drn_data.loc[:, 'layer'] = drn_data.loc[:, 'layer'] * 2 - 1
 
         # write to data file
         drndatfile = self.datafolder / 'drn.dat'
@@ -277,7 +277,7 @@ class Modflow6Model(object):
         self.maxbound['drn'] = len(drn_data)
 
         # ghb package
-        ghb_columns = ['ilay', 'row', 'col', 'head', 'cond']
+        ghb_columns = ['layer', 'row', 'col', 'head', 'cond']
         
         # select ghb data 
         select_ghb = (
@@ -301,7 +301,7 @@ class Modflow6Model(object):
         ghb_data.loc[:, 'cond'] = ghb_data.loc[:, 'cond'].clip(lower=0.)
 
         # convert layer number to full3d (1 -> 1, 2 -> 3, 3 -> 5, etc.)
-        ghb_data.loc[:, 'ilay'] = ghb_data.loc[:, 'ilay'] * 2 - 1
+        ghb_data.loc[:, 'layer'] = ghb_data.loc[:, 'layer'] * 2 - 1
 
         # write to data file
         ghbdatfile = self.datafolder / 'ghb.dat'
@@ -316,7 +316,7 @@ class Modflow6Model(object):
         self.maxbound['ghb'] = len(ghb_data)
 
         # riv package
-        riv_columns = ['ilay', 'row', 'col', 'head', 'cond', 'rbot']
+        riv_columns = ['layer', 'row', 'col', 'head', 'cond', 'rbot']
         
         # select riv data 
         select_riv = (
@@ -340,7 +340,7 @@ class Modflow6Model(object):
         riv_data.loc[:, 'cond'] = riv_data.loc[:, 'cond'].clip(lower=0.)
 
         # convert layer number to full3d (1 -> 1, 2 -> 3, 3 -> 5, etc.)
-        riv_data.loc[:, 'ilay'] = riv_data.loc[:, 'ilay'] * 2 - 1
+        riv_data.loc[:, 'layer'] = riv_data.loc[:, 'layer'] * 2 - 1
 
         # write to data file
         rivdatfile = self.datafolder / 'riv.dat'
@@ -356,14 +356,16 @@ class Modflow6Model(object):
 
 
     def write_wel(self) -> None:
-        wel_data = self.model.parameters['wells'].get_data()
+        wel_data = self.model.parameters['wells'].get_value()
 
         # get row, column in grid
         wel_data = get_wells_within_grid(wel_data, self.model.grid, 'x', 'y')
 
         # select layer numbers, row, column & pumping rates
-        wel_data = wel_data.loc[:, ['ilay', 'row', 'col', 'q_assigned']]
-        wel_data.loc[:, 'ilay'] = wel_data.loc[:, 'ilay'] * 2 - 1
+        wel_data = wel_data.loc[:, ['layer', 'row', 'col', 'q_assigned']]
+
+        # convert layer number to full3d (1 -> 1, 2 -> 3, 3 -> 5, etc.)
+        wel_data.loc[:, 'layer'] = wel_data.loc[:, 'layer'] * 2 - 1
         wel_data.loc[:, ['row', 'col']] += 1
 
         # write to data file

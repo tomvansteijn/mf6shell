@@ -22,21 +22,21 @@ nlay: 11
 
 # datasources
 datasources: [
-  {name: idomain, format_: constant, value: 1},
-  {name: top, format_: raster, file: 'data\topbot\RL{ilay:d}.tif', layered: True},
-  {name: bot, format_: raster, file: 'data\topbot\TH{ilay:d}.tif', layered: True},
-  {name: kd, format_: raster, file: 'data\kdc\TX{ilay:d}.tif', layered: True},
-  {name: c, format_: raster, file: 'data\kdc\CL{ilay:d}.tif', layered: True},
-  {name: start, format_: raster, file: 'data\startingheads\HH{ilay:d}.tif', layered: True},
-  {name: recharge, format_: raster, file: 'data\recharge\RP1.tif'},
-  {name: topsys, format_: table, file: 'data\topsys\gemiddeld_laag.txt'},
-  {name: wells, format_: table, file: 'data\wells\sq_list.csv'},
+  {name: idomain, fmt: constant, value: 1},
+  {name: top, fmt: raster, filepath: 'data\topbot\RL{layer:d}.tif', layered: True},
+  {name: bot, fmt: raster, filepath: 'data\topbot\TH{layer:d}.tif', layered: True},
+  {name: kd, fmt: raster, filepath: 'data\kdc\TX{layer:d}.tif', layered: True},
+  {name: c, fmt: raster, filepath: 'data\kdc\CL{layer:d}.tif', layered: True},
+  {name: start, fmt: raster, filepath: 'data\startingheads\HH{layer:d}.tif', layered: True},
+  {name: recharge, fmt: raster, filepath: 'data\recharge\RP1.tif'},
+  {name: topsys, fmt: topsys_table, filepath: 'data\topsys\gemiddeld_laag.txt'},
+  {name: wells, fmt: wells_table, filepath: 'data\wells\sq_list.csv'},
   ]
 
 # run options:
 run_options: {
-  # write: True,
-  # run: True,
+  write: True,
+  run: True,
   export: True,
 }
 

@@ -74,3 +74,41 @@ class RegularGrid(Grid):
     def transform(self) -> Tuple[float, float, float, float, float, float]:
         """Affine transformation consistent with GDAL"""
         return self.xmin, self.delc, 0., self.ymax, 0., -self.delr
+
+
+class PolygonNode(object):
+    def __init__(self, number, x, y, verticenumbers):
+        self.number = number
+        self.x = x
+        self.y = y
+        self.verticenumbers = verticenumbers
+
+    def to_cell2d(self):
+        return [
+            self.number,
+            self.x,
+            self.y,
+            len(self.verticenumbers),
+            ] + self.verticenumbers
+            
+
+
+class PolygonVertex(object):
+    def __init__(self, number, x, y):
+        self.number = number
+        self.x = x
+        self.y = y
+
+    def to_vertex(self):
+        return (
+            self.number,
+            self.x,
+            self.y,
+            )
+
+
+class PolygonGrid(Grid):
+    def __init__(self, nodes, vertices, boundary_nodes):
+        self.nodes = [PolygonNode(*n) for n in nodes]
+        self.vertices = [PolygonVertex(*v) for v in vertices]
+        self.boundary_nodes = boundary_nodes

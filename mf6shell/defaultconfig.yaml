@@ -1,15 +1,45 @@
 package_options: {
+  sim: {},  
   tdis: {
     time_units: 'DAYS',
     },
   gwf: {
     save_flows: True,
     },
+  ims: {
+    pname: 'ims',
+    },
   dis: {
+    pname: 'dis',
     length_units: 'METERS',
-  },
+    },
+  npf: {
+    pname: 'npf',
+    },
+  ic: {
+    pname: 'ic',
+    },
+  rch: {
+    pname: 'rch',
+    },
+  chd: {
+    pname: 'chd',
+    },
+    drn: {
+    pname: 'drn',
+    },
+  ghb: {
+    pname: 'ghb',
+    },
+  riv: {
+    pname: 'riv',
+    },
+  wel: {
+    pname: 'wel',
+    },
   oc: {
-      saverecord: [['HEAD', 'ALL'], ['BUDGET', 'ALL']],
-      printrecord: [['HEAD', 'LAST']],
+    pname: 'oc',
+    saverecord: [['HEAD', 'ALL'], ['BUDGET', 'ALL']],
+    printrecord: [['HEAD', 'LAST']],
     }
 }
