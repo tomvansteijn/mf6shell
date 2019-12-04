@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 # Tom van Steijn, Royal HaskoningDHV
 
+from mf6shell.parameters import AdoParameter
+
 import re
 
 HEADERPATTERN = (
@@ -25,13 +27,6 @@ class FliSettings(object):
         self.iftr = iftr
         self.nsar = nsar
         self.rlax = rlax
-
-
-class FliParameter(object):
-    def __init__(self, name, filepath, block_name):
-        self.name = name
-        self.filepath = filepath
-        self.block_name = block_name
 
 
 class FliCalculationOptions(object):
@@ -60,7 +55,7 @@ class FliFile(object):
         ):
         self.header = FliHeader(**header)
         self.settings = FliSettings(**settings)
-        self.parameters = [FliParameter(**p) for p in parameters]
+        self.parameters = [AdoParameter(**p) for p in parameters]
         self.calc_options = FliCalculationOptions(**calc_options)
         self.print_output = FliPrintOutput(**print_output)
 
@@ -102,14 +97,12 @@ class FliFile(object):
             # read parameters
             parameters = []
             while True:
-                line = next(lines)
-                if line == 'end':
-                    break
                 parameter = {}          
-                parameter['name'] = next(lines)
+                parameter['name'] =  next(lines)
+                if parameter['name'] == 'end':
+                    break
                 parameter['filepath'] = next(lines)
                 parameter['block_name'] = next(lines)
-
                 parameters.append(
                     parameter
                     )

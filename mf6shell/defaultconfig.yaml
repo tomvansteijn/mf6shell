@@ -8,6 +8,8 @@ package_options: {
     },
   ims: {
     pname: 'ims',
+    print_option: 'all',
+    csv_output_filerecord: 'ims.csv',
     },
   dis: {
     pname: 'dis',

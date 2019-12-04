@@ -14,18 +14,18 @@ log = logging.getLogger(os.path.basename(__file__))
 
 
 class TableSchema(Enum):
-    topsys = 1
+    drn_ghb_riv = 1
     wells = 2
 
 
 def read_table(csvfile, schema):
-    if schema is TableSchema.topsys:
-        return read_topsys(csvfile)
+    if schema is TableSchema.drn_ghb_riv:
+        return read_drn_ghb_riv(csvfile)
     elif schema is TableSchema.wells:
         return read_wells(csvfile)
 
 
-def read_topsys(csvfile):
+def read_drn_ghb_riv(csvfile):
     log.debug('reading {f.name:}'.format(f=csvfile))
     column_names = ['layer', 'row', 'col', 'head', 'rbot', 'cond', 'inffact', 'topsys']
     topsys_data = pd.read_csv(csvfile,

@@ -7,7 +7,6 @@ from mf6shell.adofiles import read_ado
 from mf6shell.csvfiles import TableSchema, read_table
 from mf6shell.rasterfiles import read_raster
 
-from typing import Iterable
 from pathlib import Path
 import logging
 import os

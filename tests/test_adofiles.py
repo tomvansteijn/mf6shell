@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Tom van Steijn, Royal HaskoningDHV
 
-from mf6shell.adofiles import polygongrid_from_teo
+from mf6shell.adofiles import polygongrid_from_teo, voronoi_from_teo
 
 import numpy as np
 import pytest
@@ -25,7 +25,7 @@ def test_polygongrid_from_teo(self, teofile):
 
 
 def main():
-    grid = polygongrid_from_teo(r'data\grid.teo', close_cell_polygons=True)
+    grid = voronoi_from_teo(r'data\grid.teo', close_cell_polygons=True)
 
     import flopy
     from pathlib import Path
@@ -84,6 +84,6 @@ def main():
 
 if __name__ == '__main__':
     import logging
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     main()
 

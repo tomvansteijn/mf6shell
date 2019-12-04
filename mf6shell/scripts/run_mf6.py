@@ -6,7 +6,7 @@ from mf6shell.grid import RegularGrid
 from mf6shell.datasources import DataSource
 from mf6shell.model import Quasi3DModel
 from mf6shell.modflow import Modflow6ModelWriter
-from mf6shell.export import export_heads
+from mf6shell.export import heads_to_raster
 
 from collections import ChainMap
 from pathlib import Path
@@ -18,7 +18,7 @@ import os
 log = logging.getLogger(os.path.basename(__file__))
 
 
-def get_parser() -> argparse.ArgumentParser:
+def get_parser():
     '''get argumentparser and add arguments'''
     parser = argparse.ArgumentParser(
         'run MF6 model specified in yaml file',
@@ -30,7 +30,7 @@ def get_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run(**kwargs) -> None:
+def run(**kwargs):
     # unpack input from kwargs
     name = kwargs['name']
     workspace = Path(kwargs['workspace'])
@@ -50,21 +50,28 @@ def run(**kwargs) -> None:
     # read parameters, expand by layer and add to parameters dict
     parameters = {}
     for datasource in datasources:
-        parameter_name = datasource.name
+        parameterkey = datasource.name
         if datasource.layered:
-            parameters[parameter_name] = []
+            parameters[parameterkey] = []
             for layer in range(nlay):
-                parameters[parameter_name].append(
+                parameters[parameterkey].append(
                     datasource.to_parameter(layer=layer)
                     )
         elif datasource.layer is not None:
-            if parameter not in parameters:
-                parameters[parameter_name] = []
-            parameters[parameter_name].append(
+            if parameterkey not in parameters:
+                parameters[parameterkey] = []
+            parameters[parameterkey].append(
                 datasource.to_parameter(layer=layer)
                 )
         else:
-            parameters[parameter_name] = datasource.to_parameter()
+            parameters[parameterkey] = datasource.to_parameter()
+
+    # sort parameters by layer number
+    for parameterkey in parameters:
+        try: 
+            parameters[parameterkey].sort(key=lambda p: p.layer)
+        except AttributeError:
+            pass
 
     # create basemodel object
     basemodel = Quasi3DModel(name, grid, nlay, parameters)
@@ -97,7 +104,7 @@ def run(**kwargs) -> None:
     # export
     if run_options.get('export', False):
         exportfolder = mf6model.workspace / 'heads'
-        export_heads(mf6model.workspace / mf6model.headsfile,
+        heads_to_raster(mf6model.workspace / mf6model.headsfile,
             exportfolder,
             grid.transform,
             )

@@ -114,3 +114,6 @@ output/
 
 # modflow check files
 *.chk
+
+# zip files
+*.zip

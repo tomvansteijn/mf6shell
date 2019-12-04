@@ -29,8 +29,8 @@ datasources: [
   {name: c, fmt: raster, filepath: 'data\kdc\CL{layer:d}.tif', layered: True},
   {name: start, fmt: raster, filepath: 'data\startingheads\HH{layer:d}.tif', layered: True},
   {name: recharge, fmt: raster, filepath: 'data\recharge\RP1.tif'},
-  {name: topsys, fmt: topsys_table, filepath: 'data\topsys\gemiddeld_laag.txt'},
-  {name: wells, fmt: wells_table, filepath: 'data\wells\sq_list.csv'},
+  {name: drn_ghb_riv, fmt: drn_ghb_riv_table, filepath: 'data\topsys\gemiddeld_laag.txt'},
+  {name: wel, fmt: wells_table, filepath: 'data\wells\sq_list.csv'},
   ]
 
 # run options:
